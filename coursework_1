@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import print_function
 from re import X
+from turtle import position
+import time
 
 import roslib
 roslib.load_manifest('cube_spotter')
@@ -32,7 +34,7 @@ class cubeTracker:
 
     # Home postion for the robot to move to
     #self.jointPose=[0.0,-1.05,0.357,0.703] #old home pos
-    self.jointPose=[-1.1,0.0,-1.0,2]
+    self.jointPose=[-1.1,-0.8,0.3,1.5]
 
     # Create the subscribers
     self.image_sub = rospy.Subscriber('states',OpenManipulatorState,self.getStates)
@@ -56,19 +58,23 @@ class cubeTracker:
 
     rospy.sleep(1) # Wait for the arm to stand up
 
-    # Open the gripper
-    self.gripperRequest=JointPosition()
-    self.gripperRequest.joint_name=["gripper"]  
-    self.gripperRequest.position=[0.01]# 0.01 represents open
-    self.setGripper(str(),self.gripperRequest,1.0)
+    # # Open the gripper
+    # self.gripperRequest=JointPosition()
+    # self.gripperRequest.joint_name=["gripper"]  
+    # self.gripperRequest.position=[0.01]# 0.01 represents open
+    # self.setGripper(str(),self.gripperRequest,1.0)
 
-    rospy.sleep(1) # Wait for the gripper to open
+    # rospy.sleep(1) # Wait for the gripper to open
 
-    # Close the gripper
-    self.gripperRequest=JointPosition()
-    self.gripperRequest.joint_name=["gripper"]  
-    self.gripperRequest.position=[-0.01]# -0.01 represents closed
-    self.setGripper(str(),self.gripperRequest,1.0)
+    # # Close the gripper
+    # self.gripperRequest=JointPosition()
+    # self.gripperRequest.joint_name=["gripper"]  
+    # self.gripperRequest.position=[-0.01]# -0.01 represents closed
+    # self.setGripper(str(),self.gripperRequest,1.0)
+
+    
+
+
 
     rospy.sleep(1) # Wait for the gripper to close
 
@@ -77,7 +83,7 @@ class cubeTracker:
     self.jointRequest.joint_name=["joint1","joint2","joint3","joint4"]  
     #self.jointRequest.position=[0.0,-1.05,0.357,0.703] #tutor coded
     self.jointRequest.position=self.jointPose
-    self.setPose(str(),self.jointRequest,1.0)
+    self.setPose(str(),self.jointRequest,2.0)
 
     rospy.sleep(1) # Wait for the arm to stand up
 
@@ -99,22 +105,34 @@ class cubeTracker:
     else:
       self.readyToMove=False
 
-
-
   # Using the data from all the subscribers, call the robot's services to move the end effector
   def aimCamera(self):
     if self.readyToMove==True: # If the robot state is not moving
 
       # Extremely simple - aim towards the target using joints [0] and [3]
-      if (abs(self.targetY-0.5)>0.1):
-        self.jointRequest.position[3]=self.jointPose[3]+(self.targetY-0.5)
+      #if (abs(self.targetY-0.5)>0.1):
+      #  self.jointRequest.position[3]=self.jointPose[3]+(self.targetY-0.5)
 
-      if (abs(self.targetX-0.5)>0.1):
-        self.jointRequest.position[0]=self.jointPose[0]-(self.targetX-0.5)
-
-      if self.targetX == 0.5:
+      # if (abs(self.targetX-0.5)>0.1):
+      #   self.jointRequest.position[0]=self.jointPose[0]-(self.targetX-0.5)
+      #   print("self centre")
+      print(self.targetY)
+      if self.targetX < 0.4 or self.targetX > 0.6:
         if self.jointPose[0]<0.9:
-          self.jointRequest.position[0]=self.jointPose[0]+0.5
+          self.jointRequest.position[0]=self.jointPose[0]+0.05
+      else:
+        self.AlignY()  
+
+      
+      
+
+
+      # if self.targetX < 0.52 and self.targetX > 0.48:
+      #   while True:
+      #     print("stopped")
+      #     time.sleep(1)
+          
+          
 
        
 
@@ -146,8 +164,34 @@ class cubeTracker:
       self.targetX=coX[index_max]
       self.targetY=coY[index_max]
     else: # If you dont find a target, report the centre of the image to keep the camera still
-      self.targetX=0.5
-      self.targetY=0.5
+      self.targetX=10
+      self.targetY=10
+
+  def GripperOpenClose(self, OpenClose):
+
+    if OpenClose == "O":
+      GrabVal = 0.01
+    else:
+      GrabVal = -0.01
+    self.gripperRequest=JointPosition()
+    self.gripperRequest.joint_name=["gripper"]  
+    self.gripperRequest.position=[GrabVal]# 0.01 represents open
+    self.setGripper(str(),self.gripperRequest,1.0)
+    rospy.sleep(1)
+
+  def AlignY(self):
+    run = False
+    if run == False:
+      self.GripperOpenClose("O")
+      #self.GripperOpenClose("C")
+      run = True
+
+    if self.targetY < 0.4: 
+      if self.jointPose[3]>0:
+          self.jointRequest.position[3]=self.jointPose[3]-0.05
+    elif self.targetY > 0.6:
+      if self.jointPose[3]<1.9:
+          self.jointRequest.position[3]=self.jointPose[3]+0.05
 
 # Main 
 def main(args):
