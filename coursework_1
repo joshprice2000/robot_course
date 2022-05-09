@@ -136,8 +136,26 @@ class cubeTracker:
         print("Josh is a cunt")
         
         self.Adjust = self.JointCalc()
-        self.jointRequest.position[3] = self.Adjust
-        self.setPose(str(),self.jointRequest,1) ########################################################################################################################
+
+        print(self.Adjust)
+        print(self.Adjust[0])
+        print(self.Adjust[1])
+        print(self.Adjust[2])
+        self.jointRequest.position[3] = self.Adjust[0]
+        self.jointRequest.position[2] = self.Adjust[2]
+        self.jointRequest.position[1] = self.Adjust[1]
+        self.setPose(str(),self.jointRequest,6)
+        rospy.sleep(1)
+        # # Close the gripper
+        # self.gripperRequest=JointPosition()
+        # self.gripperRequest.joint_name=["gripper"]  
+        # self.gripperRequest.position=[-0.01]# -0.01 represents closed
+        # self.setGripper(str(),self.gripperRequest,1.0)
+        # rospy.sleep(1)
+        # self.jointPose=[-1.1,-0.8,0.3,1.5]
+        # self.jointRequest.position=self.jointPose
+        # self.setPose(str(),self.jointRequest,4.0)
+        # rospy.sleep(1)
         
           
         
@@ -157,7 +175,7 @@ class cubeTracker:
        
 
       # This command sends the message to the robot
-      self.setPose(str(),self.jointRequest,1.0)
+      self.setPose(str(),self.jointRequest,1.0)# move the shitbot sideways
       rospy.sleep(1) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
 
 
@@ -194,13 +212,48 @@ class cubeTracker:
 
      
     self.WantJ3Y=0.03
-    self.WantJ3Distance=(2/math.pi)*(self.WantJ3X-0.14)
-    self.WantTheta3=(3/self.WantJ3Distance)
+    #self.WantJ3Distance=(2/math.pi)*(self.WantJ3X-0.14)
+    #self.WantTheta3=(3/self.WantJ3Distance)
 
-    print("want j3 dist")
-    print(self.WantJ3Distance)
-    print("Want theta3")
-    print(self.WantTheta3)
+
+    #Josh Calcs
+
+
+    self.LinearDistanceJ1J3=math.sqrt((self.WantJ3X**2)+0.0025)
+    self.J1J3Squared=(self.LinearDistanceJ1J3)**2
+    self.WantJoint3AngleBeforeCos=((self.J1J3Squared)-(0.015376)-(0.0169))
+    self.WantJoint3AngleBeforeCosDivided=self.WantJoint3AngleBeforeCos/-0.03224
+    self.WantJoint3Angle=math.acos(self.WantJoint3AngleBeforeCosDivided)
+    self.WantJ3Angle=math.pi/2-self.WantJoint3Angle+self.j2OffsetAngle
+
+
+    #Ben Calcs
+
+    self.E = math.asin(self.WantJ3X/self.LinearDistanceJ1J3)
+    self.A = math.acos((0.124*0.124-0.13*0.13-self.LinearDistanceJ1J3*self.LinearDistanceJ1J3)/(-2*self.LinearDistanceJ1J3*0.13))
+    self.F = math.pi-self.A-self.E
+    self.WantAngleJ2 = self.F - self.j2OffsetAngle
+
+
+
+    print("want j3 ang")
+    print(self.LinearDistanceJ1J3)
+    print(self.J1J3Squared)
+    print(self.WantJoint3AngleBeforeCos)
+    print(self.WantJoint3AngleBeforeCosDivided)
+    print(self.WantJoint3Angle)
+    print(self.WantJ3Angle)
+    print("Want joint angle 2: " + str(self.WantAngleJ2))
+
+    self.four=math.sqrt(16)
+    print("four")
+    print(self.four)
+
+
+    # print("want j3 dist")
+    # print(self.WantJ3Distance)
+    # print("Want theta3")
+    # print(self.WantTheta3)
 
 
 
@@ -221,12 +274,23 @@ class cubeTracker:
     print("Head Angle: " + str(self.HeadAngle))
     print("Theta8: " + str(self.Theta8))
     print("x Coor of block: " + str(self.XcoorBlock))
+    print("Want J3 X " + str(self.WantJ3X))
     
     # print("theta1 " + str(self.Theta1Total))
     print("theta2 " + str(self.Theta2Total))
     # print(self.jointPose[2])
     # print(self.jointPose[1])
-    return self.HeadFlat
+    
+    #Calculate the Head level for the head
+    #Keep Head Flat
+    self.HeadFlat = -(self.WantAngleJ2 + self.WantJ3Angle)
+
+    #Angle of Head
+    self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
+
+
+
+    return self.HeadFlat, self.WantAngleJ2, self.WantJ3Angle
 
   # Find the normalised XY co-ordinate of a cube
   def getTarget(self,data):
