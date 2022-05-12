@@ -189,11 +189,11 @@ class cubeTracker:
         if self.jointPose[0]<0.9:
           self.jointRequest.position[0]=self.jointPose[0]+0.1
       elif self.targetX < 0.48:
-        print("Run A")
+        #print("Run A")
         if self.jointPose[0]<0.9:
           self.jointRequest.position[0]=self.jointPose[0]+0.01
-      elif self.targetY <0.4 or self.targetY > 0.6:
-        print("Run B")
+      elif self.targetY <0.48 or self.targetY > 0.52:
+        #print("Run B")
         self.AlignY()
       else:
         print("Located Block")
@@ -202,13 +202,13 @@ class cubeTracker:
       # This command sends the message to the robot
       self.setPose(str(),self.jointRequest,1.0)
       rospy.sleep(1) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
-      print("Returning False")
+      #print("Returning False")
     return False 
 
 
   def JointCalc(self, HowManyBlocks): #works out X and Y position
     self.HowManyHigh = HowManyBlocks
-    self.XdistanceJ1FromJ3Height = 0.05-(self.HowManyHigh*0.035)
+    self.XdistanceJ1FromJ3Height = 0.046-(self.HowManyHigh*0.042)
     
     self.j2OffsetAngle = math.atan(0.024/0.128)
     self.link1 = (0.13)
@@ -219,7 +219,7 @@ class cubeTracker:
     self.Theta1Total = self.Joint2Ang + self.j2OffsetAngle
     self.Joint2X = math.sin(self.Theta1Total)*self.link1
     self.Joint2Y = math.cos(self.Theta1Total)*self.link1
-    self.Theta2Total = self.Theta1Total + self.Joint3Ang + math.pi/2
+    #self.Theta2Total = self.Theta1Total + self.Joint3Ang + math.pi/2
 
     self.J3Distance = math.sqrt(self.link1*self.link1 + self.link2*self.link2 - 2*self.link1*self.link2*math.cos((math.pi/2 + self.j2OffsetAngle)-self.Joint3Ang))
 
@@ -233,14 +233,37 @@ class cubeTracker:
     #Angle of Head
     self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
 
-    self.Theta8 = math.pi/2 - self.HeadAngle
+    #self.Theta8 = math.pi/2 - self.HeadAngle
+    self.Theta8 = self.HeadAngle
 
-    self.XcoorBlock = self.J3XDistance + math.tan(self.HeadAngle)*(0.077+self.J3YDistance)+0.06
+    #self.XcoorBlock = self.J3XDistance + math.tan(self.HeadAngle)*(0.077+self.J3YDistance)+0.06
+    self.XcoorBlock = self.J3XDistance + math.tan(self.HeadAngle)*(0.086+self.J3YDistance)+(0.054/math.cos(self.Theta8))
 
-    self.WantJ3X = self.XcoorBlock-0.12
+    # if self.XcoorBlock < 0.24:
+    #   self.WantJ3X = self.XcoorBlock-0.15
+    # elif self.XcoorBlock < 0.27:
+    #   self.WantJ3X = self.XcoorBlock-0.12
+    # else:
+    #   self.WantJ3X = self.XcoorBlock-0.08
+
+    self.WantJ3X = self.XcoorBlock - 0.135
+
+    if self.WantJ3X < 0.09:
+      print("Block To Close")
+      self.GoodToMove = False
+      return
+    elif self.WantJ3X > 0.25:
+      print("Block To Far")
+      self.GoodToMove = False
+      return
+    else:
+      self.GoodToMove = True  
+    
+
+
 
      
-    self.WantJ3Y=0.03
+    self.WantJ3Y=0.06
     #self.WantJ3Distance=(2/math.pi)*(self.WantJ3X-0.14)
     #self.WantTheta3=(3/self.WantJ3Distance)
 
@@ -290,7 +313,7 @@ class cubeTracker:
     # print(self.J3YDistance)
 
     # print("theta 2")
-    print(self.Theta2Total)
+    #print(self.Theta2Total)
 
     print("theta 3")
     print(self.Theta3FromBase)
@@ -303,16 +326,22 @@ class cubeTracker:
     print("Want J3 X " + str(self.WantJ3X))
     
     # print("theta1 " + str(self.Theta1Total))
-    print("theta2 " + str(self.Theta2Total))
+   # print("theta2 " + str(self.Theta2Total))
     # print(self.jointPose[2])
     # print(self.jointPose[1])
     
     #Calculate the Head level for the head
     #Keep Head Flat
+    
     self.HeadFlat = -(self.WantAngleJ2 + self.WantJ3Angle)
+
+    if self.HeadAngle < -1.8:
+      self.HeadFlat = -1.8
 
     #Angle of Head
     self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
+
+    
 
 
 
@@ -362,23 +391,30 @@ class cubeTracker:
     #   #self.GripperOpenClose("C")
     #   run = True
 
-    if self.targetY < 0.4: 
+    if self.targetY < 0.3:
       if self.jointPose[3]>0:
-          self.jointRequest.position[3]=self.jointPose[3]-0.05
-    elif self.targetY > 0.6:
+        self.jointRequest.position[3]=self.jointPose[3]-0.05
+    elif self.targetY < 0.48: 
+      if self.jointPose[3]>0:
+        self.jointRequest.position[3]=self.jointPose[3]-0.01
+    elif self.targetY > 0.7:
       if self.jointPose[3]<1.9:
-          self.jointRequest.position[3]=self.jointPose[3]+0.05
+          self.jointRequest.position[3]=self.jointPose[3]+0.05 
+    elif self.targetY > 0.52:
+      if self.jointPose[3]<1.9:
+          self.jointRequest.position[3]=self.jointPose[3]+0.01
 
   def MoveArmToBlock(self):
-    print("Move to block")
-    
-    self.jointRequest.position[3] = self.HeadFlat
-    self.setPose(str(),self.jointRequest,1)
-    rospy.sleep(2)
-    self.jointRequest.position[2] = self.WantJ3Angle
-    self.jointRequest.position[1] = self.WantAngleJ2
-    self.setPose(str(),self.jointRequest,3)
-    rospy.sleep(4)
+    if self.GoodToMove == True:
+      print("Move to block")
+      
+      self.jointRequest.position[3] = self.HeadFlat
+      self.setPose(str(),self.jointRequest,1)
+      rospy.sleep(2)
+      self.jointRequest.position[2] = self.WantJ3Angle
+      self.jointRequest.position[1] = self.WantAngleJ2
+      self.setPose(str(),self.jointRequest,3)
+      rospy.sleep(4)
   
   def HomeRobot(self):
     print("Running Home Robot")
@@ -390,9 +426,10 @@ class cubeTracker:
     rospy.sleep(3)
 
   def ClearBlockStack(self):
-    self.jointRequest.position[1] = 0
-    self.setPose(str(),self.jointRequest,1)
-    rospy.sleep(2)
+    if self.GoodToMove == True:
+      self.jointRequest.position[1] = 0
+      self.setPose(str(),self.jointRequest,1)
+      rospy.sleep(2)
   
 
 # Main 
@@ -407,36 +444,41 @@ def main(args):
     RunJointCalc = False
     MovedToBlock = False
     HowManyBlocks = 0
+    Printed = False
     while not rospy.is_shutdown():
 
-      if FoundBlock == False:
-        print("Running Aim Camera")
-        print(FoundBlock)
+      if FoundBlock == False and HowManyBlocks < 2:
+        #print("Running Aim Camera")
+        #print(FoundBlock)
         FoundBlock = ic.aimCamera()
-        print(FoundBlock)
-        print("Return")
-      elif FoundBlock == True and RunJointCalc == False:
-        print("Running Joint Calc")
+        #print(FoundBlock)
+        #print("Return")
+      elif FoundBlock == True and RunJointCalc == False and HowManyBlocks < 2:
+        #print("Running Joint Calc")
         ic.JointCalc(HowManyBlocks)
         RunJointCalc = True
       elif RunJointCalc == True and MovedToBlock == False and HowManyBlocks < 2:
         ic.MoveArmToBlock()
         MovedToBlock = True
         print("Moved to Block")
+        rospy.sleep(4)
         ic.GripperOpenClose("c")
         print("Gripper Closed")
         if HowManyBlocks > 0:
           ic.GripperOpenClose("O")
-          ic.ClearBlockStack()
+        ic.ClearBlockStack()
         ic.HomeRobot()
         print("Homed Robot")
         HowManyBlocks += 1
+        print(HowManyBlocks)
         #ic.GripperOpenClose("O")
         FoundBlock = False
         RunJointCalc = False
         MovedToBlock = False
       else:
-        print("Successfully Stacked Blocks")
+        if Printed == False:
+          print("Successfully Stacked Blocks")
+          Printed = True
         
       
       # if run == False:
