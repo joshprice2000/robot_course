@@ -29,6 +29,8 @@ class cubeTracker:
     # Where the block is in the image (start at the centre)
     self.targetX=0.5
     self.targetY=0.5
+    #Colour at the start default is red
+    self.ColourChoice = 'red'
 
     # Whether the robot is ready to move (assume it isn't)
     self.readyToMove=False
@@ -181,7 +183,8 @@ class cubeTracker:
   #     self.setPose(str(),self.jointRequest,1.0)# move the shitbot sideways
   #     rospy.sleep(1) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
 
-  def aimCamera(self):
+  def aimCamera(self, Colour):
+    self.ColourChoice = Colour
     # print("Running")
     if self.readyToMove==True: # If the robot state is not moving
 
@@ -198,6 +201,8 @@ class cubeTracker:
       else:
         print("Located Block")
         return True
+
+      
 
       # This command sends the message to the robot
       self.setPose(str(),self.jointRequest,1.0)
@@ -249,15 +254,18 @@ class cubeTracker:
     self.WantJ3X = self.XcoorBlock - 0.135
 
     if self.WantJ3X < 0.09:
-      print("Block To Close")
-      self.GoodToMove = False
-      return
+      print("Block Is Too Close Please Remove It")
+      rospy.sleep(3)
+      #self.GoodToMove = False
+      return False
     elif self.WantJ3X > 0.25:
-      print("Block To Far")
-      self.GoodToMove = False
-      return
-    else:
-      self.GoodToMove = True  
+      print("Block Is Too Far Please Remove it")
+      rospy.sleep(3)
+      #self.GoodToMove = False
+      return False
+    
+      #self.GoodToMove = True  
+
     
 
 
@@ -341,7 +349,7 @@ class cubeTracker:
     #Angle of Head
     self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
 
-    
+    return True
 
 
 
@@ -357,7 +365,7 @@ class cubeTracker:
 
     # Get the red cubes
     for c in range(len(data.cubes)):
-      if (data.cubes[c].cube_colour=='red'):
+      if (data.cubes[c].cube_colour==self.ColourChoice):
         area.append(data.cubes[c].area)
         coX.append(data.cubes[c].normalisedCoordinateX)
         coY.append(data.cubes[c].normalisedCoordinateY)
@@ -405,16 +413,16 @@ class cubeTracker:
           self.jointRequest.position[3]=self.jointPose[3]+0.01
 
   def MoveArmToBlock(self):
-    if self.GoodToMove == True:
-      print("Move to block")
-      
-      self.jointRequest.position[3] = self.HeadFlat
-      self.setPose(str(),self.jointRequest,1)
-      rospy.sleep(2)
-      self.jointRequest.position[2] = self.WantJ3Angle
-      self.jointRequest.position[1] = self.WantAngleJ2
-      self.setPose(str(),self.jointRequest,3)
-      rospy.sleep(4)
+    #if self.GoodToMove == True:
+    print("Move to block")
+    
+    self.jointRequest.position[3] = self.HeadFlat
+    self.setPose(str(),self.jointRequest,1)
+    rospy.sleep(2)
+    self.jointRequest.position[2] = self.WantJ3Angle
+    self.jointRequest.position[1] = self.WantAngleJ2
+    self.setPose(str(),self.jointRequest,3)
+    rospy.sleep(4)
   
   def HomeRobot(self):
     print("Running Home Robot")
@@ -426,10 +434,10 @@ class cubeTracker:
     rospy.sleep(3)
 
   def ClearBlockStack(self):
-    if self.GoodToMove == True:
-      self.jointRequest.position[1] = 0
-      self.setPose(str(),self.jointRequest,1)
-      rospy.sleep(2)
+    #if self.GoodToMove == True:
+    self.jointRequest.position[1] = 0
+    self.setPose(str(),self.jointRequest,1)
+    rospy.sleep(2)
   
 
 # Main 
@@ -445,19 +453,25 @@ def main(args):
     MovedToBlock = False
     HowManyBlocks = 0
     Printed = False
+    GoodToMove = True
     while not rospy.is_shutdown():
 
       if FoundBlock == False and HowManyBlocks < 2:
         #print("Running Aim Camera")
         #print(FoundBlock)
-        FoundBlock = ic.aimCamera()
+        FoundBlock = ic.aimCamera('red') #############################
+        FoundBlock = ic.aimCamera('blue') ############################
+        FoundBlock = ic.aimCamera('yellow') ##########################
         #print(FoundBlock)
         #print("Return")
       elif FoundBlock == True and RunJointCalc == False and HowManyBlocks < 2:
         #print("Running Joint Calc")
-        ic.JointCalc(HowManyBlocks)
-        RunJointCalc = True
-      elif RunJointCalc == True and MovedToBlock == False and HowManyBlocks < 2:
+        GoodToMove = ic.JointCalc(HowManyBlocks)
+        if GoodToMove == False:
+          FoundBlock = False 
+        else:
+          RunJointCalc = True
+      elif RunJointCalc == True and MovedToBlock == False and HowManyBlocks < 2 and GoodToMove == True:
         ic.MoveArmToBlock()
         MovedToBlock = True
         print("Moved to Block")
@@ -494,5 +508,3 @@ def main(args):
 
 if __name__ == '__main__':
     main(sys.argv)
-
-
