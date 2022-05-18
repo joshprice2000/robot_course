@@ -1,0 +1,541 @@
+#!/usr/bin/env python
+from __future__ import print_function
+import math 
+from re import X
+from turtle import position
+import time
+
+import roslib
+roslib.load_manifest('cube_spotter')
+import sys
+import rospy
+from std_msgs.msg import String
+from sensor_msgs.msg import JointState
+
+from cube_spotter.msg import cubeData
+from cube_spotter.msg import cubeArray
+import numpy as np;
+
+from open_manipulator_msgs.msg import OpenManipulatorState
+from open_manipulator_msgs.msg import JointPosition
+from open_manipulator_msgs.srv import SetJointPosition
+from open_manipulator_msgs.srv import GetJointPosition
+
+
+class cubeTracker:
+
+  def __init__(self):
+
+    # Where the block is in the image (start at the centre)
+    self.targetX=0.5
+    self.targetY=0.5
+
+    # Whether the robot is ready to move (assume it isn't)
+    self.readyToMove=False
+    self.Colour = 'red'
+    self.DoneColour = 0
+    self.NeedMove = False
+
+    # Home postion for the robot to move to
+    #self.jointPose=[0.0,-1.05,0.357,0.703] #old home pos
+    #self.jointPose=[-1.1,-0.8,0.3,1.5] #newest home pose 
+    #self.jointPose=[0,0,0,0]
+
+    # Create the subscribers
+    self.image_sub = rospy.Subscriber('states',OpenManipulatorState,self.getStates)
+    self.joint_state_sub = rospy.Subscriber('joint_states',JointState,self.getJoints)
+    self.moving_sub = rospy.Subscriber('cubes',cubeArray,self.getTarget)
+
+    # Create the service caller to move the robot
+    self.setPose = rospy.ServiceProxy('goal_joint_space_path', SetJointPosition)
+    self.setGripper = rospy.ServiceProxy('goal_tool_control', SetJointPosition)
+
+
+    ## EXAMPLE POSES - Start by moving the robot to some example positions, and use the gripper
+
+
+    # # Send the robot to "zero"
+    # self.jointRequest=JointPosition()
+    # self.jointRequest.joint_name=["joint1","joint2","joint3","joint4"]  
+    # #self.jointRequest.position=[0.0,0.0,0.0,0.0]
+    # self.jointRequest.position=self.jointPose
+    # self.setPose(str(),self.jointRequest,4.0)
+
+    rospy.sleep(1) # Wait for the arm to stand up
+
+    # # Open the gripper
+    # self.gripperRequest=JointPosition()
+    # self.gripperRequest.joint_name=["gripper"]  
+    # self.gripperRequest.position=[0.01]# 0.01 represents open
+    # self.setGripper(str(),self.gripperRequest,1.0)
+
+    # rospy.sleep(1) # Wait for the gripper to open
+
+    # # Close the gripper
+    # self.gripperRequest=JointPosition()
+    # self.gripperRequest.joint_name=["gripper"]  
+    # self.gripperRequest.position=[-0.01]# -0.01 represents closed
+    # self.setGripper(str(),self.gripperRequest,1.0)
+
+    
+
+
+
+    rospy.sleep(1) # Wait for the gripper to close
+
+    # Send the robot "home"
+    # self.jointRequest=JointPosition()
+    # self.jointRequest.joint_name=["joint1","joint2","joint3","joint4"]  
+    # #self.jointRequest.position=[0.0,-1.05,0.357,0.703] #tutor coded
+    # self.jointRequest.position=self.jointPose
+    # self.setPose(str(),self.jointRequest,2.0)
+
+    self.HomeRobot()
+    self.GripperOpenClose("O")
+
+    #rospy.sleep(2) # Wait for the arm to stand up
+
+    # As the last movement called was the arm, we dont update the request again below, but it would be necessary if switching between the arm and the gripper.
+
+
+  # Get the robot's joint positions
+  def getJoints(self,data):
+    self.jointPose=data.position
+
+
+
+
+
+  # Get data on if the robot is currently moving
+  def getStates(self,data):
+    if (data.open_manipulator_moving_state=='"STOPPED"'):
+      self.readyToMove=True
+    else:
+      self.readyToMove=False
+
+  
+
+  # Using the data from all the subscribers, call the robot's services to move the end effector
+  # def aimCamera(self):
+
+    
+
+
+
+  #   if self.readyToMove==True: # If the robot state is not moving
+
+  #     # Extremely simple - aim towards the target using joints [0] and [3]
+  #     #if (abs(self.targetY-0.5)>0.1):
+  #     #  self.jointRequest.position[3]=self.jointPose[3]+(self.targetY-0.5)
+
+  #     # if (abs(self.targetX-0.5)>0.1):
+  #     #   self.jointRequest.position[0]=self.jointPose[0]-(self.targetX-0.5)
+  #     #   print("self centre")
+      
+  #     #print(self.targetY)
+  #     if self.targetX < 0.4 or self.targetX > 0.6:
+  #       if self.jointPose[0]<0.9:
+  #         self.jointRequest.position[0]=self.jointPose[0]+0.05
+  #     elif self.targetY <0.4 or self.targetY > 0.6:
+  #       self.AlignY()
+  #     else:
+  #       print("Josh is a cunt")
+        
+  #       self.Adjust = self.JointCalc()
+
+  #       print(self.Adjust)
+  #       print(self.Adjust[0])
+  #       print(self.Adjust[1])
+  #       print(self.Adjust[2])
+  #       self.jointRequest.position[3] = self.Adjust[0]
+  #       self.jointRequest.position[2] = self.Adjust[2]
+  #       self.jointRequest.position[1] = self.Adjust[1]
+  #       self.setPose(str(),self.jointRequest,6)
+  #       rospy.sleep(1)
+  #       # # Close the gripper
+  #       # self.gripperRequest=JointPosition()
+  #       # self.gripperRequest.joint_name=["gripper"]  
+  #       # self.gripperRequest.position=[-0.01]# -0.01 represents closed
+  #       # self.setGripper(str(),self.gripperRequest,1.0)
+  #       # rospy.sleep(1)
+  #       # self.jointPose=[-1.1,-0.8,0.3,1.5]
+  #       # self.jointRequest.position=self.jointPose
+  #       # self.setPose(str(),self.jointRequest,4.0)
+  #       # rospy.sleep(1)
+        
+          
+        
+
+      
+      
+      
+
+
+  #     # if self.targetX < 0.52 and self.targetX > 0.48:
+  #     #   while True:
+  #     #     print("stopped")
+  #     #     time.sleep(1)
+          
+          
+
+       
+
+  #     # This command sends the message to the robot
+  #     self.setPose(str(),self.jointRequest,1.0)# move the shitbot sideways
+  #     rospy.sleep(1) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
+
+  def aimCamera(self):
+  
+    # print("Running")
+    if self.readyToMove==True: # If the robot state is not moving
+
+      
+
+      # if self.targetX < 0.3 or self.targetX > 0.7:
+      #   if self.jointPose[0]<0.9:
+      #     self.jointRequest.position[0]=self.jointPose[0]+0.1
+      # elif self.targetX < 0.48:
+      #   #print("Run A")
+      #   if self.jointPose[0]<0.9:
+      #     self.jointRequest.position[0]=self.jointPose[0]+0.01
+      # elif self.targetY <0.48 or self.targetY > 0.52:
+      #   #print("Run B")
+      #   self.AlignY()
+      # else:
+      #   print("Located Block")
+      #   return True
+      if self.targetY != 10:
+        if (abs(self.targetY-0.5)>0.02):
+          self.jointRequest.position[3]=self.jointPose[3]+(self.targetY-0.5)
+          self.NeedMove = True
+
+      if self.targetX == 10:
+        if self.DoneColour == 0: #0 means blue 1 means yellow 2 means found colour
+            self.Colour = 'blue'
+            self.DoneColour = 1
+            self.NeedMove = False
+            print("Change to blue")
+            rospy.sleep(0.2)
+        elif self.DoneColour == 1:
+            self.Colour = 'yellow'
+            self.DoneColour = 3
+            self.NeedMove = False
+            print("Change to yellow")
+            rospy.sleep(0.2)
+        else:
+          self.jointRequest.position[0]=self.jointPose[0]+0.4
+          self.Colour = 'red'
+          self.DoneColour = 0
+          self.NeedMove = True
+      elif (abs(self.targetX-0.5)>0.02):
+        self.jointRequest.position[0]=self.jointPose[0]-(self.targetX-0.5)
+        self.DoneColour = 2
+        self.NeedMove = True
+      
+      if (abs(self.targetY-0.5)<0.02) and (abs(self.targetX-0.5)<0.02):
+        self.DoneColour = 0
+        return True
+        
+
+
+
+      
+      if self.NeedMove == True:
+      # This command sends the message to the robot
+        self.setPose(str(),self.jointRequest,3)
+        rospy.sleep(3) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
+        self.NeedMove = False
+      #print("Returning False")
+    return False 
+
+
+  def JointCalc(self, HowManyBlocks): #works out X and Y position
+    self.HowManyHigh = HowManyBlocks
+    self.YdistanceJ1FromJ3Height = 0.046-(self.HowManyHigh*0.04)
+    
+    self.j2OffsetAngle = math.atan(0.024/0.128)
+    self.link1 = (0.13)
+    self.link2 = (0.124)
+    self.link3 = (0.126)
+    self.Joint2Ang = self.jointPose[1]
+    self.Joint3Ang = self.jointPose[2]
+    self.Theta1Total = self.Joint2Ang + self.j2OffsetAngle
+    self.Joint2X = math.sin(self.Theta1Total)*self.link1
+    self.Joint2Y = math.cos(self.Theta1Total)*self.link1
+    #self.Theta2Total = self.Theta1Total + self.Joint3Ang + math.pi/2
+
+    self.J3Distance = math.sqrt(self.link1*self.link1 + self.link2*self.link2 - 2*self.link1*self.link2*math.cos((math.pi/2 + self.j2OffsetAngle)-self.Joint3Ang))
+
+    self.Theta3FromBase=math.acos(((self.link2)**2-(self.link1)**2-(self.J3Distance)**2)/(-2*self.link1*self.J3Distance))+self.Theta1Total
+    self.J3XDistance=math.sin(self.Theta3FromBase)*self.J3Distance
+    self.J3YDistance = math.cos(self.Theta3FromBase)*self.J3Distance
+
+    #Keep Head Flat
+    self.HeadFlat = -(self.jointPose[1] + self.jointPose[2])
+
+    #Angle of Head
+    self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
+
+    #self.Theta8 = math.pi/2 - self.HeadAngle
+    self.Theta8 = self.HeadAngle
+
+    #self.XcoorBlock = self.J3XDistance + math.tan(self.HeadAngle)*(0.077+self.J3YDistance)+0.06
+    self.XcoorBlock = self.J3XDistance + math.tan(self.HeadAngle)*(0.086+self.J3YDistance)+(0.054/math.cos(self.Theta8))
+
+    # if self.XcoorBlock < 0.24:
+    #   self.WantJ3X = self.XcoorBlock-0.15
+    # elif self.XcoorBlock < 0.27:
+    #   self.WantJ3X = self.XcoorBlock-0.12
+    # else:
+    #   self.WantJ3X = self.XcoorBlock-0.08
+
+    self.WantJ3X = self.XcoorBlock - 0.137 ## red and yellow
+    #self.WantJ3X = self.XcoorBlock - 0.15 # blue
+
+    if self.WantJ3X < 0.09:
+      print("Block Too Close")
+      self.GoodToMove = False
+      return
+    elif self.WantJ3X > 0.25:
+      print("Block Too Far")
+      self.GoodToMove = False
+      return
+    else:
+      self.GoodToMove = True  
+    
+
+
+
+     
+    self.WantJ3Y=0.06
+    #self.WantJ3Distance=(2/math.pi)*(self.WantJ3X-0.14)
+    #self.WantTheta3=(3/self.WantJ3Distance)
+
+
+    #Josh Calcs
+
+
+    self.LinearDistanceJ1J3=math.sqrt((self.WantJ3X**2)+(self.YdistanceJ1FromJ3Height**2))
+    self.J1J3Squared=(self.LinearDistanceJ1J3)**2
+    self.WantJoint3AngleBeforeCos=((self.J1J3Squared)-(0.015376)-(0.0169))
+    self.WantJoint3AngleBeforeCosDivided=self.WantJoint3AngleBeforeCos/-0.03224
+    self.WantJoint3Angle=math.acos(self.WantJoint3AngleBeforeCosDivided)
+    self.WantJ3Angle=math.pi/2-self.WantJoint3Angle+self.j2OffsetAngle
+
+
+    #Ben Calcs
+
+    self.E = math.asin(self.WantJ3X/self.LinearDistanceJ1J3)
+    self.A = math.acos((0.124*0.124-0.13*0.13-self.LinearDistanceJ1J3*self.LinearDistanceJ1J3)/(-2*self.LinearDistanceJ1J3*0.13))
+    self.F = math.pi-self.A-self.E
+    self.WantAngleJ2 = self.F - self.j2OffsetAngle
+
+
+
+    print("want j3 ang")
+    print(self.LinearDistanceJ1J3)
+    print(self.J1J3Squared)
+    print(self.WantJoint3AngleBeforeCos)
+    print(self.WantJoint3AngleBeforeCosDivided)
+    print(self.WantJoint3Angle)
+    print(self.WantJ3Angle)
+    print("Want joint angle 2: " + str(self.WantAngleJ2))
+
+    self.four=math.sqrt(16)
+    print("four")
+    print(self.four)
+
+
+    # print("want j3 dist")
+    # print(self.WantJ3Distance)self.WantAngleJ2
+
+
+
+    # print("x")
+    # print(self.J3XDistance)
+    # print("y")
+    # print(self.J3YDistance)
+
+    # print("theta 2")'red'
+    print("theta 3")
+    print(self.Theta3FromBase)
+
+    print("Head Flat: " + str(self.HeadFlat))
+    print("Joints added: " + str(self.Joint2Ang + self.Joint3Ang))
+    print("Head Angle: " + str(self.HeadAngle))
+    print("Theta8: " + str(self.Theta8))
+    print("x Coor of block: " + str(self.XcoorBlock))
+    print("Want J3 X " + str(self.WantJ3X))
+    
+    # print("theta1 " + str(self.Theta1Total))
+   # print("theta2 " + str(self.Theta2Total))
+    # print(self.jointPose[2])
+    # print(self.jointPose[1])
+    
+    #Calculate the Head level for the head
+    #Keep Head Flat
+    
+    self.HeadFlat = -(self.WantAngleJ2 + self.WantJ3Angle)
+
+    if self.HeadAngle < -1.8:
+      self.HeadFlat = -1.8
+
+    #Angle of Head
+    self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
+
+    
+
+
+
+    #return self.HeadFlat, self.WantAngleJ2, self.WantJ3Angle
+
+  # Find the normalised XY co-ordinate of a cube
+  def getTarget(self,data):
+
+    # Example = track the biggest red object
+    area=[]
+    coX=[]
+    coY=[]
+
+    # Get the red cubes
+    for c in range(len(data.cubes)):
+      if (data.cubes[c].cube_colour==self.Colour): ##################################################################################################
+        area.append(data.cubes[c].area)
+        coX.append(data.cubes[c].normalisedCoordinateX)
+        coY.append(data.cubes[c].normalisedCoordinateY)
+      
+    
+    # Find the biggest red cube
+    if (len(area))>0:
+      index_max = max(range(len(area)), key=area.__getitem__)
+      self.targetX=coX[index_max]
+      self.targetY=coY[index_max]
+    else: # If you dont find a target, report the centre of the image to keep the camera still
+      self.targetX=10
+      self.targetY=10
+
+  def GripperOpenClose(self, OpenClose):
+
+    if OpenClose == "O":
+      GrabVal = 0.01
+    else:
+      GrabVal = -0.01
+    self.gripperRequest=JointPosition()
+    self.gripperRequest.joint_name=["gripper"]  
+    self.gripperRequest.position=[GrabVal]# 0.01 represents open
+    self.setGripper(str(),self.gripperRequest,1.0)
+    rospy.sleep(2)
+
+  def AlignY(self):
+    # run = False
+    # if run == False:
+    #   self.GripperOpenClose("O")
+    #   #self.GripperOpenClose("C")
+    #   run = True
+
+    if self.targetY < 0.3:
+      if self.jointPose[3]>0:
+        self.jointRequest.position[3]=self.jointPose[3]-0.05
+    elif self.targetY < 0.48: 
+      if self.jointPose[3]>0:
+        self.jointRequest.position[3]=self.jointPose[3]-0.01
+    elif self.targetY > 0.7:
+      if self.jointPose[3]<1.9:
+          self.jointRequest.position[3]=self.jointPose[3]+0.05 
+    elif self.targetY > 0.52:
+      if self.jointPose[3]<1.9:
+          self.jointRequest.position[3]=self.jointPose[3]+0.01
+
+  def MoveArmToBlock(self):
+    if self.GoodToMove == True:
+      print("Move to block")
+      
+      self.jointRequest.position[3] = self.HeadFlat
+      self.setPose(str(),self.jointRequest,1)
+      rospy.sleep(1)
+      self.jointRequest.position[2] = self.WantJ3Angle
+      self.jointRequest.position[1] = self.WantAngleJ2
+      self.setPose(str(),self.jointRequest,3)
+      rospy.sleep(4)
+  
+  def HomeRobot(self):
+    print("Running Home Robot")
+    self.jointRequest=JointPosition()
+    self.jointRequest.joint_name=["joint1","joint2","joint3","joint4"]  
+    self.jointPose=[-1.1,-0.8,0.3,1.5]
+    self.jointRequest.position=self.jointPose
+    self.setPose(str(),self.jointRequest,2.0)
+    rospy.sleep(3)
+
+  def ClearBlockStack(self):
+    if self.GoodToMove == True:
+      self.jointRequest.position[1] = 0
+      self.setPose(str(),self.jointRequest,1)
+      rospy.sleep(2)
+  
+
+# Main 
+def main(args):
+
+  ic = cubeTracker()
+  rospy.init_node('cube_tracker', anonymous=True)
+  try:
+    #rospy.spin()
+    # run = False
+    FoundBlock = False
+    RunJointCalc = False
+    MovedToBlock = False
+    HowManyBlocks = 0
+    Printed = False
+    while not rospy.is_shutdown():
+
+      if FoundBlock == False and HowManyBlocks < 2:
+        #print("Running Aim Camera")
+        #print(FoundBlock)
+        FoundBlock = ic.aimCamera()
+        
+        #print(FoundBlock)
+        #print("Return")
+      elif FoundBlock == True and RunJointCalc == False and HowManyBlocks < 2:
+        #print("Running Joint Calc")
+        ic.JointCalc(HowManyBlocks)
+        RunJointCalc = True
+      elif RunJointCalc == True and MovedToBlock == False and HowManyBlocks < 2:
+        ic.MoveArmToBlock()
+        MovedToBlock = True
+        print("Moved to Block")
+        #rospy.sleep(4)
+        ic.GripperOpenClose("c")
+        print("Gripper Closed")
+        if HowManyBlocks > 0:
+          ic.GripperOpenClose("O")
+        ic.ClearBlockStack()
+        ic.HomeRobot()
+        print("Homed Robot")
+        HowManyBlocks += 1
+        print(HowManyBlocks)
+        #ic.GripperOpenClose("O")
+        FoundBlock = False
+        RunJointCalc = False
+        MovedToBlock = False
+      else:
+        if Printed == False:
+          print("Successfully Stacked Blocks")
+          Printed = True
+        
+      
+      # if run == False:
+      #   ic.JointCalc()
+      #   run = True
+      
+
+
+
+
+  except KeyboardInterrupt:
+    print("Shutting down")
+
+if __name__ == '__main__':
+    main(sys.argv)
+
+
