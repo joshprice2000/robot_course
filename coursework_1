@@ -34,6 +34,7 @@ class cubeTracker:
     self.readyToMove=False
     self.Colour = 'red'
     self.DoneColour = 0
+    self.NeedMove = False
 
     # Home postion for the robot to move to
     #self.jointPose=[0.0,-1.05,0.357,0.703] #old home pos
@@ -206,21 +207,30 @@ class cubeTracker:
       if self.targetY != 10:
         if (abs(self.targetY-0.5)>0.02):
           self.jointRequest.position[3]=self.jointPose[3]+(self.targetY-0.5)
+          self.NeedMove = True
 
       if self.targetX == 10:
         if self.DoneColour == 0: #0 means blue 1 means yellow 2 means found colour
             self.Colour = 'blue'
             self.DoneColour = 1
+            self.NeedMove = False
+            print("Change to blue")
+            rospy.sleep(0.2)
         elif self.DoneColour == 1:
             self.Colour = 'yellow'
             self.DoneColour = 3
+            self.NeedMove = False
+            print("Change to yellow")
+            rospy.sleep(0.2)
         else:
-          self.jointRequest.position[0]=self.jointPose[0]+0.2
+          self.jointRequest.position[0]=self.jointPose[0]+0.4
           self.Colour = 'red'
           self.DoneColour = 0
+          self.NeedMove = True
       elif (abs(self.targetX-0.5)>0.02):
         self.jointRequest.position[0]=self.jointPose[0]-(self.targetX-0.5)
         self.DoneColour = 2
+        self.NeedMove = True
       
       if (abs(self.targetY-0.5)<0.02) and (abs(self.targetX-0.5)<0.02):
         self.DoneColour = 0
@@ -230,10 +240,11 @@ class cubeTracker:
 
 
       
-
+      if self.NeedMove == True:
       # This command sends the message to the robot
-      self.setPose(str(),self.jointRequest,3)
-      rospy.sleep(3) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
+        self.setPose(str(),self.jointRequest,3)
+        rospy.sleep(3) # Sleep after sending the service request as you can crash the robot firmware if you poll too fast
+        self.NeedMove = False
       #print("Returning False")
     return False 
 
@@ -278,19 +289,20 @@ class cubeTracker:
     # else:
     #   self.WantJ3X = self.XcoorBlock-0.08
 
-    self.WantJ3X = self.XcoorBlock - 0.135 ## red and yellow
+    self.WantJ3X = self.XcoorBlock - 0.137 ## red and yellow
     #self.WantJ3X = self.XcoorBlock - 0.15 # blue
 
     if self.WantJ3X < 0.09:
-      print("Block To Close")
+      print("Block Too Close")
       self.GoodToMove = False
-      return
+      return False
     elif self.WantJ3X > 0.25:
-      print("Block To Far")
+      print("Block Too Far")
       self.GoodToMove = False
-      return
+      return False
     else:
-      self.GoodToMove = True  
+      self.GoodToMove = True
+      
     
 
 
@@ -373,7 +385,7 @@ class cubeTracker:
     self.HeadAngle = math.pi/2 + self.HeadFlat - self.jointPose[3]
 
     
-
+    return True  
 
 
     #return self.HeadFlat, self.WantAngleJ2, self.WantJ3Angle
@@ -440,8 +452,8 @@ class cubeTracker:
       print("Move to block")
       
       self.jointRequest.position[3] = self.HeadFlat
-      self.setPose(str(),self.jointRequest,1)
-      rospy.sleep(1)
+      self.setPose(str(),self.jointRequest,3)
+      rospy.sleep(3)
       self.jointRequest.position[2] = self.WantJ3Angle
       self.jointRequest.position[1] = self.WantAngleJ2
       self.setPose(str(),self.jointRequest,3)
@@ -476,6 +488,7 @@ def main(args):
     MovedToBlock = False
     HowManyBlocks = 0
     Printed = False
+    GoodToMove = False
     while not rospy.is_shutdown():
 
       if FoundBlock == False and HowManyBlocks < 2:
@@ -487,22 +500,25 @@ def main(args):
         #print("Return")
       elif FoundBlock == True and RunJointCalc == False and HowManyBlocks < 2:
         #print("Running Joint Calc")
-        ic.JointCalc(HowManyBlocks)
+        GoodToMove = ic.JointCalc(HowManyBlocks)
         RunJointCalc = True
       elif RunJointCalc == True and MovedToBlock == False and HowManyBlocks < 2:
-        ic.MoveArmToBlock()
-        MovedToBlock = True
-        print("Moved to Block")
-        #rospy.sleep(4)
-        ic.GripperOpenClose("c")
-        print("Gripper Closed")
-        if HowManyBlocks > 0:
-          ic.GripperOpenClose("O")
-        ic.ClearBlockStack()
+        if GoodToMove == True:
+          ic.MoveArmToBlock()
+          MovedToBlock = True
+          print("Moved to Block")
+          #rospy.sleep(4)
+          ic.GripperOpenClose("c")
+          print("Gripper Closed")
+          if HowManyBlocks > 0:
+            ic.GripperOpenClose("O")
+          ic.ClearBlockStack()
+          HowManyBlocks += 1
+          print(HowManyBlocks)
+          
         ic.HomeRobot()
         print("Homed Robot")
-        HowManyBlocks += 1
-        print(HowManyBlocks)
+        GoodToMove=False
         #ic.GripperOpenClose("O")
         FoundBlock = False
         RunJointCalc = False
